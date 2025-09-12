@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/url"
 	"slices"
+	"strings"
 
 	"tailscale.com/client/tailscale/apitype"
 	"tailscale.com/util/mak"
@@ -80,6 +81,15 @@ func (s *IDPServer) serveAuthorize(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Parse and validate scopes
+	scopeParam := uq.Get("scope")
+	scopes := strings.Fields(scopeParam)
+	validatedScopes, err := s.validateScopes(scopes)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
 	// Generate and save a code and Auth Request
 	code := rands.HexString(32)
 	ar := &AuthRequest{
@@ -88,6 +98,7 @@ func (s *IDPServer) serveAuthorize(w http.ResponseWriter, r *http.Request) {
 		RedirectURI: redirectURI,
 		ClientID:    clientID,
 		FunnelRP:    funnelClient, // Store the validated client
+		Scopes:      validatedScopes,
 	}
 
 	s.mu.Lock()
