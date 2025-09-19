@@ -46,7 +46,7 @@ type IDPServer struct {
 	serverURL   string // "https://foo.bar.ts.net"
 	stateDir    string // directory for persisted state (keys, etc)
 	funnel      bool
-	localTSMode bool
+	localTSMode bool // use local tailscaled instead of tsnet
 	enableSTS   bool
 
 	lazyMux        lazy.SyncValue[*http.ServeMux]
@@ -58,6 +58,10 @@ type IDPServer struct {
 	accessToken   map[string]*AuthRequest  // keyed by random hex
 	refreshToken  map[string]*AuthRequest  // keyed by random hex
 	funnelClients map[string]*FunnelClient // keyed by client ID
+
+	// for bypassing application capability checks for testing
+	// see issue #44
+	bypassAppCapCheck bool
 }
 
 // AuthRequest represents an authorization request
@@ -240,12 +244,11 @@ func (s *IDPServer) newMux() *http.ServeMux {
 	mux.HandleFunc("/userinfo", s.serveUserInfo)
 
 	// Register /register endpoint for Dynamic Client Registration
-	// Migrated from legacy/tsidp.go:683
-	mux.HandleFunc("/register", s.serveDynamicClientRegistration)
+	mux.HandleFunc("/register", s.addGrantAccessContext(s.serveDynamicClientRegistration))
 
 	// Register UI handler - must be last as it handles "/"
 	// Migrated from legacy/tsidp.go:685
-	mux.HandleFunc("/", s.handleUI)
+	mux.HandleFunc("/", s.addGrantAccessContext(s.handleUI))
 	return mux
 }
 
@@ -430,5 +433,3 @@ func ServeOnLocalTailscaled(ctx context.Context, lc *local.Client, st *ipnstate.
 
 	return func() { watcher.Close() }, watcherChan, nil
 }
-
-// getFunnelClientsPath returns the full path to the funnel clients file

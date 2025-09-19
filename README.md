@@ -12,6 +12,7 @@
 - A Tailscale network (tailnet) with magicDNS and HTTPS enabled
 - A Tailscale authentication key from your tailnet
 - (Recommended) Docker installed on your system
+- Ability to set an Application capability grant
 
 ## Running tsidp
 
@@ -70,6 +71,36 @@ Visit `https://idp.yourtailnet.ts.net` to confirm the service is running.
 _If you're running tsidp for the first time, you may not be able to access it initially even though it is running. It takes a few minutes for the TLS certificate to generate._
 
 </details>
+
+## Setting an Application Capability Grant
+
+tsidp requires an [Application capability grant](https://tailscale.com/kb/1537/grants-app-capabilities) to allow access to the admin UI and dynamic client registration endpoints.
+
+This is a permissive grant that is suitable only for testing purposes:
+
+```json
+"grants": [
+  {
+    "src": ["*"],
+    "dst": ["*"],
+    "app": {
+      "tailscale.com/cap/tsidp": [
+        {
+          // STS controls
+          "users":     ["*"],
+          "resources": ["*"],
+
+          // allow access to UI
+          "allow_admin_ui": true,
+
+          // allow dynamic client registration
+          "allow_dcr": true,
+        },
+      ],
+    },
+  },
+],
+```
 
 ## Application Configuration Guides
 

@@ -129,19 +129,6 @@ func (tc tailscaleClaims) toMap() map[string]any {
 	return m
 }
 
-// Capability rule types
-// Migrated from legacy/tsidp.go:779-790
-
-type capRule struct {
-	IncludeInUserInfo bool           `json:"includeInUserInfo"`
-	ExtraClaims       map[string]any `json:"extraClaims,omitempty"` // list of features peer is allowed to edit
-}
-
-type stsCapRule struct {
-	Users     []string `json:"users"`     // list of users allowed to access resources (supports "*" wildcard)
-	Resources []string `json:"resources"` // list of audience/resource URIs the user can access
-}
-
 // serveToken is the main /token endpoint handler
 // Migrated from legacy/tsidp.go:921-942
 func (s *IDPServer) serveToken(w http.ResponseWriter, r *http.Request) {
@@ -379,7 +366,7 @@ func (s *IDPServer) serveTokenExchange(w http.ResponseWriter, r *http.Request) {
 
 	// Check ACL grant for STS token exchange
 	who := ar.RemoteUser
-	rules, err := tailcfg.UnmarshalCapJSON[stsCapRule](who.CapMap, "tailscale.com/cap/tsidp")
+	rules, err := tailcfg.UnmarshalCapJSON[capRule](who.CapMap, "tailscale.com/cap/tsidp")
 	if err != nil {
 		//log.Printf("tsidp: failed to unmarshal STS capability: %v", err)
 		writeTokenEndpointError(w, http.StatusForbidden, "access_denied", fmt.Sprintf("failed to unmarshal STS capability: %s", err.Error()))
@@ -695,7 +682,7 @@ func (s *IDPServer) identifyClient(r *http.Request) string {
 // Migrated from legacy/tsidp.go:426-472
 func (s *IDPServer) validateResourcesForUser(who *apitype.WhoIsResponse, requestedResources []string) ([]string, error) {
 	// Check ACL grant using the same capability as we would use for STS token exchange
-	rules, err := tailcfg.UnmarshalCapJSON[stsCapRule](who.CapMap, "tailscale.com/cap/tsidp")
+	rules, err := tailcfg.UnmarshalCapJSON[capRule](who.CapMap, "tailscale.com/cap/tsidp")
 	if err != nil {
 		return nil, fmt.Errorf("failed to unmarshal capability: %w", err)
 	}

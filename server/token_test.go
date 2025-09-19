@@ -27,7 +27,7 @@ func TestResourceIndicators(t *testing.T) {
 		name               string
 		authorizationQuery string
 		tokenFormData      url.Values
-		capMapRules        []stsCapRule
+		capMapRules        []capRule
 		expectStatus       int
 		checkResponse      func(t *testing.T, body []byte)
 	}{
@@ -38,7 +38,7 @@ func TestResourceIndicators(t *testing.T) {
 				"grant_type":   {"authorization_code"},
 				"redirect_uri": {"https://example.com/callback"},
 			},
-			capMapRules: []stsCapRule{
+			capMapRules: []capRule{
 				{
 					Users:     []string{"*"},
 					Resources: []string{"https://api.example.com"},
@@ -75,7 +75,7 @@ func TestResourceIndicators(t *testing.T) {
 				"grant_type":   {"authorization_code"},
 				"redirect_uri": {"https://example.com/callback"},
 			},
-			capMapRules: []stsCapRule{
+			capMapRules: []capRule{
 				{
 					Users:     []string{"*"},
 					Resources: []string{"*"}, // Allow all resources
@@ -113,7 +113,7 @@ func TestResourceIndicators(t *testing.T) {
 				"redirect_uri": {"https://example.com/callback"},
 				"resource":     {"https://api.example.com"},
 			},
-			capMapRules: []stsCapRule{
+			capMapRules: []capRule{
 				{
 					Users:     []string{"user@example.com"},
 					Resources: []string{"https://api.example.com"},
@@ -138,7 +138,7 @@ func TestResourceIndicators(t *testing.T) {
 				"redirect_uri": {"https://example.com/callback"},
 				"resource":     {"https://unauthorized.example.com"},
 			},
-			capMapRules: []stsCapRule{
+			capMapRules: []capRule{
 				{
 					Users:     []string{"user@example.com"},
 					Resources: []string{"https://api.example.com"},
@@ -806,7 +806,7 @@ func TestRefreshTokenWithResources(t *testing.T) {
 		name              string
 		originalResources []string
 		refreshResources  []string
-		capMapRules       []stsCapRule
+		capMapRules       []capRule
 		expectStatus      int
 		expectError       string
 	}{
@@ -814,7 +814,7 @@ func TestRefreshTokenWithResources(t *testing.T) {
 			name:              "refresh with resource downscoping",
 			originalResources: []string{"https://api1.example.com", "https://api2.example.com"},
 			refreshResources:  []string{"https://api1.example.com"},
-			capMapRules: []stsCapRule{
+			capMapRules: []capRule{
 				{
 					Users:     []string{"*"},
 					Resources: []string{"*"},
@@ -826,7 +826,7 @@ func TestRefreshTokenWithResources(t *testing.T) {
 			name:              "refresh with resource not in original grant",
 			originalResources: []string{"https://api1.example.com"},
 			refreshResources:  []string{"https://api2.example.com"},
-			capMapRules: []stsCapRule{
+			capMapRules: []capRule{
 				{
 					Users:     []string{"*"},
 					Resources: []string{"*"},
@@ -839,7 +839,7 @@ func TestRefreshTokenWithResources(t *testing.T) {
 			name:              "refresh without resource parameter",
 			originalResources: []string{"https://api1.example.com"},
 			refreshResources:  nil,
-			capMapRules: []stsCapRule{
+			capMapRules: []capRule{
 				{
 					Users:     []string{"*"},
 					Resources: []string{"*"},

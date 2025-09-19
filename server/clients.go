@@ -292,6 +292,17 @@ func (s *IDPServer) serveDynamicClientRegistration(w http.ResponseWriter, r *htt
 		return
 	}
 
+	access, ok := r.Context().Value(appCapCtxKey).(*accessGrantedRules)
+	if !ok {
+		writeJSONError(w, http.StatusForbidden, "access_denied", "application capability not found")
+		return
+	}
+
+	if !access.allowDCR {
+		writeJSONError(w, http.StatusForbidden, "access_denied", "application capability not granted")
+		return
+	}
+
 	var registrationRequest struct {
 		RedirectURIs            []string `json:"redirect_uris"`
 		TokenEndpointAuthMethod string   `json:"token_endpoint_auth_method,omitempty"`

@@ -40,12 +40,22 @@ var editTmpl = template.Must(headerTmpl.New("edit").Parse(editHTML))
 
 var processStart = time.Now()
 
-
 // handleUI serves the UI for managing OAuth/OIDC clients
 // Migrated from legacy/ui.go:61-85
 func (s *IDPServer) handleUI(w http.ResponseWriter, r *http.Request) {
 	if isFunnelRequest(r) {
 		http.Error(w, "tsidp: UI not available over Funnel", http.StatusNotFound)
+		return
+	}
+
+	access, ok := r.Context().Value(appCapCtxKey).(*accessGrantedRules)
+	if !ok {
+		writeJSONError(w, http.StatusForbidden, "access_denied", "application capability not found")
+		return
+	}
+
+	if !access.allowAdminUI {
+		writeJSONError(w, http.StatusForbidden, "access_denied", "application capability not granted")
 		return
 	}
 
