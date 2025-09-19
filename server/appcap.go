@@ -38,7 +38,9 @@ type accessGrantedRules struct {
 	rules        []capRule // list of rules
 }
 
-// addGrantAccessContext adds a AccessGrantedRules to the request context
+// addGrantAccessContext wraps an http.HandlerFunc and adds a AccessGrantedRules to the
+// *http.Request's context. Handlers that are protected by an Application capability grant
+// can conventiently extract and check the granted capabilities.
 func (s *IDPServer) addGrantAccessContext(handler http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// used only for testing to bypass app cap checks
@@ -61,7 +63,7 @@ func (s *IDPServer) addGrantAccessContext(handler http.HandlerFunc) http.Handler
 			return
 		}
 
-		// accessing from localhost
+		// allow all access when requests are coming from localhost
 		if ap, err := netip.ParseAddrPort(r.RemoteAddr); err == nil {
 			if ap.Addr().IsLoopback() {
 				r = r.WithContext(context.WithValue(r.Context(), appCapCtxKey, &accessGrantedRules{
