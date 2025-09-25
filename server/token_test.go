@@ -562,7 +562,7 @@ func TestRefreshTokenFlow(t *testing.T) {
 			clientSecret: "wrong-secret",
 			expectStatus: http.StatusBadRequest, // Both legacy and server should reject this
 			checkResponse: func(t *testing.T, body []byte) {
-				var resp oauthErrorResponse
+				var resp httpErrorResponse
 				if err := json.Unmarshal(body, &resp); err != nil {
 					t.Fatalf("failed to unmarshal response: %v", err)
 				}
@@ -640,6 +640,7 @@ func TestRefreshTokenFlow(t *testing.T) {
 
 			req := httptest.NewRequest("POST", "/token", strings.NewReader(form.Encode()))
 			req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+			req.Header.Set("Accept", "application/json")
 
 			rr := httptest.NewRecorder()
 			s.serveToken(rr, req)
@@ -696,6 +697,7 @@ func TestTokenEndpointUnsupportedGrantType(t *testing.T) {
 			}
 
 			req := httptest.NewRequest("POST", "/token", strings.NewReader(form.Encode()))
+			req.Header.Set("Accept", "application/json")
 			req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
 			rr := httptest.NewRecorder()
@@ -769,6 +771,7 @@ func TestTokenExpiration(t *testing.T) {
 			}
 
 			req := httptest.NewRequest("GET", "/userinfo", nil)
+			req.Header.Set("Accept", "application/json")
 			req.Header.Set("Authorization", "Bearer "+testToken)
 
 			rr := httptest.NewRecorder()

@@ -249,7 +249,7 @@ func TestServeDynamicClientRegistration(t *testing.T) {
 			method:       "POST",
 			body:         `{"redirect_uris": ["https://example.com/callback"]}`,
 			isFunnel:     true,
-			expectStatus: http.StatusForbidden,
+			expectStatus: http.StatusUnauthorized,
 			checkResponse: func(t *testing.T, body []byte) {
 				var errResp map[string]interface{}
 				if err := json.Unmarshal(body, &errResp); err != nil {
@@ -378,6 +378,7 @@ func TestServeDynamicClientRegistration(t *testing.T) {
 			}
 
 			req := httptest.NewRequest(tt.method, "/register", body)
+			req.Header.Add("Accept", "application/json")
 			if tt.isFunnel {
 				req.Header.Set("Tailscale-Funnel-Request", "true")
 			}
