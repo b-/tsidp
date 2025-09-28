@@ -172,7 +172,9 @@ tsidp can be used as IdP server for any application that supports custom OIDC pr
 > [!IMPORTANT]
 > Note: If you'd like to use tsidp to login to a SaaS application outside of your tailnet rather than a self-hosted app inside of your tailnet, you'll need to run tsidp with `--funnel` enabled.
 
-- (TODO) Proxmox
+- [Proxmox](docs/proxmox/README.md)
+
+### TODOs
 - (TODO) Grafana
 - (TODO) open-webui
 - (TODO) Jellyfin
