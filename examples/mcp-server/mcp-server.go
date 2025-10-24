@@ -57,19 +57,20 @@ func main() {
 		return mcpServer
 	}, nil)
 
+	if oauthResource == "" {
+		oauthResource = "http://" + httpListenAddr
+	}
+
 	// tsidp sends an opaque token so we need to call the /introspection endpoint to validate it
 	// when a token is verified it is automatically added to the request context
 	// see TokenInfo(...) below for how to access the identity information.
 	verifier := createVerifier(introspectionEndpoint)
 	authWrappedHandler := auth.RequireBearerToken(verifier, &auth.RequireBearerTokenOptions{
-		ResourceMetadataURL: ".well-known/oauth-protected-resource",
+		ResourceMetadataURL: fmt.Sprintf("%s/%s", oauthResource, ".well-known/oauth-protected-resource"),
 		Scopes:              []string{"email", "profile"}, /* scopes required by this server */
 	})(streamHandler)
 
 	mux := http.NewServeMux()
-	if oauthResource == "" {
-		oauthResource = "http://" + httpListenAddr
-	}
 	mux.HandleFunc("/.well-known/oauth-protected-resource", oauthProtectedResourceHandler(idpURL, oauthResource))
 
 	/**
@@ -182,7 +183,7 @@ func oauthProtectedResourceHandler(authServerUrl string, resourceURL string) htt
 			"resource":                              resourceURL,
 			"authorization_servers":                 []string{authServerUrl},
 			"bearer_methods_supported":              []string{"header"},
-			"resource_documentation":                "https://github.com/mostlygeek/mcp-demo",
+			"resource_documentation":                "https://github.com/tailscale/tsidp/examples/mcp-server",
 			"resource_signing_alg_values_supported": []string{"RS256"},
 			"scopes_supported":                      []string{"email", "profile"}, // match tsidp/.well-known/openid-configuration
 		}
