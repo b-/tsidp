@@ -8,6 +8,7 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/rsa"
+	"crypto/tls"
 	"crypto/x509"
 	"encoding/binary"
 	"encoding/json"
@@ -24,6 +25,7 @@ import (
 	"sync"
 	"time"
 
+	"filippo.io/csrf"
 	"gopkg.in/square/go-jose.v2"
 	"tailscale.com/client/local"
 	"tailscale.com/client/tailscale/apitype"
@@ -50,7 +52,7 @@ type IDPServer struct {
 	localTSMode bool // use local tailscaled instead of tsnet
 	enableSTS   bool
 
-	lazyMux        lazy.SyncValue[*http.ServeMux]
+	lazyMux        lazy.SyncValue[http.Handler]
 	lazySigningKey lazy.SyncValue[*signingKey]
 	lazySigner     lazy.SyncValue[jose.Signer]
 
@@ -236,8 +238,10 @@ func (s *IDPServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 // newMux creates the HTTP request multiplexer
 // Migrated from legacy/tsidp.go:674-687
-func (s *IDPServer) newMux() *http.ServeMux {
+func (s *IDPServer) newMux() http.Handler {
+
 	mux := http.NewServeMux()
+
 	// Register .well-known handlers
 	mux.HandleFunc("/.well-known/jwks.json", s.serveJWKS)
 	mux.HandleFunc("/.well-known/openid-configuration", s.serveOpenIDConfig)
@@ -246,10 +250,6 @@ func (s *IDPServer) newMux() *http.ServeMux {
 	// Register /authorize endpoint
 	// Migrated from legacy/tsidp.go:679
 	mux.HandleFunc("/authorize", s.serveAuthorize)
-
-	// Register /clients/ endpoint
-	// Migrated from legacy/tsidp.go:684
-	mux.HandleFunc("/clients/", s.addGrantAccessContext(s.serveClients))
 
 	// Register /token endpoint
 	// Migrated from legacy/tsidp.go:681
@@ -266,10 +266,16 @@ func (s *IDPServer) newMux() *http.ServeMux {
 	// Register /register endpoint for Dynamic Client Registration
 	mux.HandleFunc("/register", s.addGrantAccessContext(s.serveDynamicClientRegistration))
 
+	// Register /clients/ - API access to manage clients DB
+	// wrap it in a cross origin protection handler to prevent CSRF
+	mux.Handle("/clients/", s.addGrantAccessContext(s.serveClients))
+
 	// Register UI handler - must be last as it handles "/"
-	// Migrated from legacy/tsidp.go:685
-	mux.HandleFunc("/", s.addGrantAccessContext(s.handleUI))
-	return mux
+	mux.Handle("/", s.addGrantAccessContext(s.handleUI))
+
+	protect := csrf.New()
+	protect.AddTrustedOrigin(s.serverURL)
+	return protect.Handler(mux)
 }
 
 // oidcSigner returns a JOSE signer for signing JWT tokens
@@ -523,4 +529,23 @@ func writeHTTPError(
 type httpErrorResponse struct {
 	Error            string `json:"error"`
 	ErrorDescription string `json:"error_description,omitempty"`
+}
+
+// isFunnelRequest checks if the request is coming through Tailscale Funnel
+func isFunnelRequest(r *http.Request) bool {
+	// If we're funneling through the local tailscaled, it will set this HTTP header
+	if r.Header.Get("Tailscale-Funnel-Request") != "" {
+		return true
+	}
+
+	// If the funneled connection is from tsnet, then the net.Conn will be of type ipn.FunnelConn
+	netConn := r.Context().Value(CtxConn{})
+	// if the conn is wrapped inside TLS, unwrap it
+	if tlsConn, ok := netConn.(*tls.Conn); ok {
+		netConn = tlsConn.NetConn()
+	}
+	if _, ok := netConn.(*ipn.FunnelConn); ok {
+		return true
+	}
+	return false
 }

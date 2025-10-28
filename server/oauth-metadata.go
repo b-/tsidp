@@ -4,13 +4,11 @@
 package server
 
 import (
-	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"net/http"
 
 	"gopkg.in/square/go-jose.v2"
-	"tailscale.com/ipn"
 	"tailscale.com/types/views"
 )
 
@@ -88,7 +86,7 @@ var (
 func (s *IDPServer) serveOpenIDConfig(w http.ResponseWriter, r *http.Request) {
 	h := w.Header()
 	h.Set("Access-Control-Allow-Origin", "*")
-	h.Set("Access-Control-Allow-Method", "GET, OPTIONS")
+	h.Set("Access-Control-Allow-Methods", "GET, OPTIONS")
 	h.Set("Access-Control-Allow-Headers", "*")
 
 	// early return for pre-flight OPTIONS requests.
@@ -137,7 +135,7 @@ func (s *IDPServer) serveOpenIDConfig(w http.ResponseWriter, r *http.Request) {
 func (s *IDPServer) serveOAuthMetadata(w http.ResponseWriter, r *http.Request) {
 	h := w.Header()
 	h.Set("Access-Control-Allow-Origin", "*")
-	h.Set("Access-Control-Allow-Method", "GET, OPTIONS")
+	h.Set("Access-Control-Allow-Methods", "GET, OPTIONS")
 	h.Set("Access-Control-Allow-Headers", "*")
 
 	// early return for pre-flight OPTIONS requests.
@@ -186,7 +184,7 @@ func (s *IDPServer) serveOAuthMetadata(w http.ResponseWriter, r *http.Request) {
 func (s *IDPServer) serveJWKS(w http.ResponseWriter, r *http.Request) {
 	h := w.Header()
 	h.Set("Access-Control-Allow-Origin", "*")
-	h.Set("Access-Control-Allow-Method", "GET, OPTIONS")
+	h.Set("Access-Control-Allow-Methods", "GET, OPTIONS")
 	h.Set("Access-Control-Allow-Headers", "*")
 
 	// early return for pre-flight OPTIONS requests.
@@ -217,26 +215,4 @@ func (s *IDPServer) serveJWKS(w http.ResponseWriter, r *http.Request) {
 	}); err != nil {
 		writeHTTPError(w, r, http.StatusInternalServerError, ecServerError, "internal server error", err)
 	}
-}
-
-// Helper functions
-
-// isFunnelRequest checks if the request is coming through Tailscale Funnel
-// Migrated from legacy/tsidp.go:2392-2410
-func isFunnelRequest(r *http.Request) bool {
-	// If we're funneling through the local tailscaled, it will set this HTTP header
-	if r.Header.Get("Tailscale-Funnel-Request") != "" {
-		return true
-	}
-
-	// If the funneled connection is from tsnet, then the net.Conn will be of type ipn.FunnelConn
-	netConn := r.Context().Value(CtxConn{})
-	// if the conn is wrapped inside TLS, unwrap it
-	if tlsConn, ok := netConn.(*tls.Conn); ok {
-		netConn = tlsConn.NetConn()
-	}
-	if _, ok := netConn.(*ipn.FunnelConn); ok {
-		return true
-	}
-	return false
 }
