@@ -440,7 +440,9 @@ func ServeOnLocalTailscaled(ctx context.Context, lc *local.Client, st *ipnstate.
 	foregroundSc := new(ipn.ServeConfig)
 	mak.Set(&sc.Foreground, n.SessionID, foregroundSc)
 	serverURL := strings.TrimSuffix(st.Self.DNSName, ".")
-	fmt.Printf("setting funnel for %s:%v\n", serverURL, dstPort)
+	if shouldFunnel {
+		fmt.Printf("setting funnel for %s:%v\n", serverURL, dstPort)
+	}
 
 	foregroundSc.SetFunnel(serverURL, dstPort, shouldFunnel)
 	foregroundSc.SetWebHandler(&ipn.HTTPHandler{
