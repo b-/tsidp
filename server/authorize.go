@@ -86,6 +86,11 @@ func (s *IDPServer) serveAuthorize(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if who.Node.View().IsTagged() {
+		redirectAuthError(w, r, redirectURI, ecAccessDenied, "tagged node doesn't have a user identity", state)
+		return
+	}
+
 	// Generate and save a code and Auth Request
 	code := rands.HexString(32)
 	ar := &AuthRequest{
@@ -104,7 +109,7 @@ func (s *IDPServer) serveAuthorize(w http.ResponseWriter, r *http.Request) {
 	// Validate scopes
 	validatedScopes, err := s.validateScopes(ar.Scopes)
 	if err != nil {
-		redirectAuthError(w, r, redirectURI, "invalid_scope", fmt.Sprintf("invalid scope: %v", err), state)
+		redirectAuthError(w, r, redirectURI, ecInvalidScope, fmt.Sprintf("invalid scope: %v", err), state)
 		return
 	}
 	ar.Scopes = validatedScopes

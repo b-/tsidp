@@ -156,6 +156,7 @@ const (
 	ecInvalidRequest   = "invalid_request"
 	ecInvalidClient    = "invalid_client"
 	ecInvalidGrant     = "invalid_grant"
+	ecInvalidScope     = "invalid_scope"
 	ecServerError      = "server_error"
 	ecNotFound         = "not_found"
 	ecUnsupportedGrant = "unsupported_grant_type"

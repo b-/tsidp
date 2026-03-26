@@ -1132,6 +1132,7 @@ func TestServeToken(t *testing.T) {
 	tests := []struct {
 		name           string
 		caps           tailcfg.PeerCapMap
+		tags           []string
 		method         string
 		grantType      string
 		code           string
@@ -1186,6 +1187,16 @@ func TestServeToken(t *testing.T) {
 			redirectURI: "https://rp.example.com/callback",
 			code:        "valid-code",
 			remoteAddr:  "192.168.0.1:12345",
+			expectError: true,
+		},
+		{
+			name:        "tagged nodes are not allowed",
+			method:      "POST",
+			grantType:   "authorization_code",
+			redirectURI: "https://rp.example.com/callback",
+			code:        "valid-code",
+			remoteAddr:  "192.168.0.1:12345",
+			tags:        []string{"tag:mytag"},
 			expectError: true,
 		},
 		{
@@ -1249,6 +1260,7 @@ func TestServeToken(t *testing.T) {
 				Key:      key.NodePublic{},
 				Cap:      1,
 				DiscoKey: key.DiscoPublic{},
+				Tags:     tt.tags,
 			}
 
 			remoteUser := &apitype.WhoIsResponse{

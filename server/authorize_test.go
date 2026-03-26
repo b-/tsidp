@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"tailscale.com/client/local"
 	"tailscale.com/client/tailscale/apitype"
 	"tailscale.com/tailcfg"
 )
@@ -534,13 +535,11 @@ func TestServeAuthorize(t *testing.T) {
 		redirectURI    string
 		state          string
 		nonce          string
-		setupClient    bool
 		clientRedirect string
 		useFunnel      bool // whether to simulate funnel request
 		mockWhoIsError bool // whether to make WhoIs return an error
-		expectError    bool
+		isTaggedNode   bool // whether to make IsTagged return true
 		expectCode     int
-		expectRedirect bool
 	}{
 		// Security boundary test: funnel rejection
 		{
@@ -549,10 +548,8 @@ func TestServeAuthorize(t *testing.T) {
 			redirectURI:    "https://rp.example.com/callback",
 			state:          "random-state",
 			nonce:          "random-nonce",
-			setupClient:    true,
 			clientRedirect: "https://rp.example.com/callback",
 			useFunnel:      true,
-			expectError:    true,
 			expectCode:     http.StatusUnauthorized,
 		},
 
@@ -562,7 +559,6 @@ func TestServeAuthorize(t *testing.T) {
 			clientID:    "",
 			redirectURI: "https://rp.example.com/callback",
 			useFunnel:   false,
-			expectError: true,
 			expectCode:  http.StatusBadRequest,
 		},
 		{
@@ -570,7 +566,6 @@ func TestServeAuthorize(t *testing.T) {
 			clientID:    "test-client",
 			redirectURI: "",
 			useFunnel:   false,
-			expectError: true,
 			expectCode:  http.StatusBadRequest,
 		},
 
@@ -579,29 +574,61 @@ func TestServeAuthorize(t *testing.T) {
 			name:        "invalid client_id",
 			clientID:    "invalid-client",
 			redirectURI: "https://rp.example.com/callback",
-			setupClient: false,
 			useFunnel:   false,
-			expectError: true,
 			expectCode:  http.StatusBadRequest,
 		},
 		{
 			name:           "redirect_uri mismatch",
 			clientID:       "test-client",
 			redirectURI:    "https://wrong.example.com/callback",
-			setupClient:    true,
 			clientRedirect: "https://rp.example.com/callback",
 			useFunnel:      false,
-			expectError:    true,
 			expectCode:     http.StatusBadRequest,
+		},
+
+		// other cases
+		{
+			name:           "WhoIs error blocks flow",
+			clientID:       "test-client",
+			redirectURI:    "https://rp.example.com/callback",
+			clientRedirect: "https://rp.example.com/callback",
+			mockWhoIsError: true,
+			expectCode:     http.StatusInternalServerError,
+		},
+		{
+			name:           "tagged node is not allowed",
+			clientID:       "test-client",
+			redirectURI:    "https://rp.example.com/callback",
+			clientRedirect: "https://rp.example.com/callback",
+			isTaggedNode:   true,
+			expectCode:     http.StatusFound,
+		},
+		{
+			name:           "successfully issues auth code",
+			clientID:       "test-client",
+			redirectURI:    "https://rp.example.com/callback",
+			clientRedirect: "https://rp.example.com/callback",
+			expectCode:     http.StatusFound,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			srv := setupTestServer(t, nil)
+			whoisResponse := &apitype.WhoIsResponse{
+				Node: &tailcfg.Node{},
+			}
+			if tt.isTaggedNode {
+				whoisResponse.Node.Tags = append(whoisResponse.Node.Tags, "tag:authorize-test-tag")
+			}
 
-			// For non-funnel tests, we'll test the parameter validation logic
-			// without needing to mock WhoIs, since the validation happens before WhoIs calls
+			var lc *local.Client
+			if tt.mockWhoIsError {
+				lc = newTestWhoIsClient(t, nil, true)
+			} else {
+				lc = newTestWhoIsClient(t, whoisResponse, false)
+			}
+
+			srv := setupTestServer(t, lc)
 
 			// Setup client if needed
 			srv.funnelClients["test-client"] = &FunnelClient{
@@ -640,59 +667,68 @@ func TestServeAuthorize(t *testing.T) {
 			rr := httptest.NewRecorder()
 			srv.serveAuthorize(rr, req)
 
-			if tt.expectError {
-				if rr.Code != tt.expectCode {
-					t.Errorf("expected status code %d, got %d: %s", tt.expectCode, rr.Code, rr.Body.String())
+			if rr.Code != tt.expectCode {
+				t.Errorf("expected status code %d, got %d: %s", tt.expectCode, rr.Code, rr.Body.String())
+			}
+
+			// For any other code, the error check above is the last step
+			if tt.expectCode != http.StatusFound {
+				return
+			}
+
+			location := rr.Header().Get("Location")
+			if location == "" {
+				t.Error("expected Location header in redirect response")
+				return
+			}
+
+			// Parse the redirect URL to verify it contains a code
+			redirectURL, err := url.Parse(location)
+			if err != nil {
+				t.Errorf("failed to parse redirect URL: %v", err)
+				return
+			}
+
+			// For a tagged node, we expect an `access_denied` error as the last step
+			if tt.isTaggedNode {
+				errCode := redirectURL.Query().Get("error")
+				if errCode != ecAccessDenied {
+					t.Error("expected 'error' parameter in redirect URL to be 'access_denied'")
 				}
-			} else if tt.expectRedirect {
-				if rr.Code != http.StatusFound {
-					t.Errorf("expected redirect (302), got %d: %s", rr.Code, rr.Body.String())
+				return
+			}
+
+			code := redirectURL.Query().Get("code")
+			if code == "" {
+				t.Error("expected 'code' parameter in redirect URL")
+			}
+
+			// Verify state is preserved if provided
+			if tt.state != "" {
+				returnedState := redirectURL.Query().Get("state")
+				if returnedState != tt.state {
+					t.Errorf("expected state '%s', got '%s'", tt.state, returnedState)
 				}
+			}
 
-				location := rr.Header().Get("Location")
-				if location == "" {
-					t.Error("expected Location header in redirect response")
-				} else {
-					// Parse the redirect URL to verify it contains a code
-					redirectURL, err := url.Parse(location)
-					if err != nil {
-						t.Errorf("failed to parse redirect URL: %v", err)
-					} else {
-						code := redirectURL.Query().Get("code")
-						if code == "" {
-							t.Error("expected 'code' parameter in redirect URL")
-						}
+			// Verify the auth request was stored
+			srv.mu.Lock()
+			ar, ok := srv.code[code]
+			srv.mu.Unlock()
 
-						// Verify state is preserved if provided
-						if tt.state != "" {
-							returnedState := redirectURL.Query().Get("state")
-							if returnedState != tt.state {
-								t.Errorf("expected state '%s', got '%s'", tt.state, returnedState)
-							}
-						}
+			if !ok {
+				t.Error("expected authorization request to be stored")
+				return
+			}
 
-						// Verify the auth request was stored
-						srv.mu.Lock()
-						ar, ok := srv.code[code]
-						srv.mu.Unlock()
-
-						if !ok {
-							t.Error("expected authorization request to be stored")
-						} else {
-							if ar.ClientID != tt.clientID {
-								t.Errorf("expected clientID '%s', got '%s'", tt.clientID, ar.ClientID)
-							}
-							if ar.RedirectURI != tt.redirectURI {
-								t.Errorf("expected redirectURI '%s', got '%s'", tt.redirectURI, ar.RedirectURI)
-							}
-							if ar.Nonce != tt.nonce {
-								t.Errorf("expected nonce '%s', got '%s'", tt.nonce, ar.Nonce)
-							}
-						}
-					}
-				}
-			} else {
-				t.Errorf("unexpected test case: not expecting error or redirect")
+			if ar.ClientID != tt.clientID {
+				t.Errorf("expected clientID '%s', got '%s'", tt.clientID, ar.ClientID)
+			}
+			if ar.RedirectURI != tt.redirectURI {
+				t.Errorf("expected redirectURI '%s', got '%s'", tt.redirectURI, ar.RedirectURI)
+			}
+			if ar.Nonce != tt.nonce {
+				t.Errorf("expected nonce '%s', got '%s'", tt.nonce, ar.Nonce)
 			}
 		})
 	}
